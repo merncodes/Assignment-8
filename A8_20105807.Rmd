@@ -1,0 +1,153 @@
+---
+title: "Assignment 8"
+author: "Marin H"
+date: "2023-03-06"
+output: html_document
+---
+
+https://github.com/merncodes/Assignment-8
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Set-up
+
+### Library 
+```{r, message = F}
+library(vegan) # to create distance matrix using Bray-Curtis method
+library(ggtree) # to visualize NMDS output
+library(ape) # 
+library(tidyverse) # to use dplyr
+library(cowplot) # to plot two graphs side by side 
+source("/Users/mh_mac/Documents/CLASSES/BIOL 432/theme_pub.R") # for crisp images 
+```
+
+### Upload data
+```{r}
+Flowers <- read.csv("/Users/mh_mac/Documents/CLASSES/BIOL 432/Week 8/Assignment Week 8/FloristicSurvey.csv")
+```
+
+### Separate outinformation 
+```{r}
+Flwr_Species <- as.data.frame(Flowers[11:44]) # species occupy columns 11 to 44
+row.names(Flwr_Species) <- Flowers$Quadrate # keep unique identifiers
+
+Flwr_Local <- as.data.frame(Flowers[1:3]) # location info in columns 1 to 3
+```
+
+
+## Question 1. 
+
+### Determine species count per quadrate
+```{r}
+# Sum the number of species sampled in each row
+SpeciesSum <- Flowers %>%
+  mutate(RowSums = rowSums(Flowers[11:44]))  %>% # sum each quadrate 
+  arrange(Location) # arrange by location to simplify subsetting in next code chunk 
+```
+
+### Plot the species count subsetted by presence/absence of garlic mustard
+```{r}
+ggplot(SpeciesSum) +
+  geom_boxplot(aes(x= Location, y=RowSums, fill = Location)) +
+  xlab("Sampled in or out of garlic mustard patches") +
+  ylab("Species count per quadrate") +
+  theme_pub()
+```
+
+**Figure 1** Species count higher in quadrates where garlic mustard is absent. 34 different plant species were observed across 30 1m x 1m quadrates at QUBS, and counted for each individual occurrence. Counts were summed across rows and plotted as quadrates in (i) mustard patches or out (o) of mustard patches. Solid black line represents group median, whiskers represent the interquartile range. 
+
+### Determine if the presence of garlic is significant
+```{r}
+# null hypothesis: the presence of garlic has no impact on species count in each quadrate
+# alternative hypothesis: the presence of garlic has an impact on species count in each quadrate
+
+# Subset species sampled in presence of garlic mustard
+SpeciesIN <- SpeciesSum[1:15,] %>%
+  select(RowSums)
+
+# Subset species sampled in absence of garlic mustard
+SpeciesOUT <- SpeciesSum[16:30,] %>%
+  select(RowSums)
+
+# Perform a t-test to identify if garlic mustard has a significant effect on species count 
+t.test(SpeciesIN, SpeciesOUT)
+```
+
+#### Interpretation
+
+Species count of different plant species is higher when garlic mustard is not present; however, the difference is not significant (p > 0.05). So I conclude that the presence of garlic mustard does not have a large effect on the species count of each plant community. 
+
+## Question 2. 
+
+### Create dissimilarity matrix of species 
+```{r}
+Flwr_Species_dist <- vegdist(Flwr_Species, method="bray", binary=F)
+```
+
+### Use Neighbour-joining algorithm to cluster species
+```{r}
+# nj() refers to neighbourhood-joining, which is an algorithm that generates a phylogeny by starting with the smallest 'distance' between traits in the distance matrix then the next smallest distance, etc. 
+Flwr_Species_dist_tree <- nj(Flwr_Species_dist)
+```
+
+### Plot abundance of species
+```{r}
+# Impact of presence/absence of garlic mustard on plant communities
+InOut1 <- ggtree(Flwr_Species_dist_tree, layout = "rectangular") %<+% Flowers +
+  geom_tiplab(aes(colour = Location)) +
+  theme(legend.position="right")
+
+# Impact of sampling population on plant communities
+SampPop1 <- ggtree(Flwr_Species_dist_tree, layout = "rectangular") %<+% Flowers +
+  geom_tiplab(aes(colour = Population)) +
+  theme(legend.position="right")
+
+# plot both graphs together 
+plot_grid(InOut1, SampPop1, labels = "AUTO")
+```
+
+**Figure 2.** Quadrate plant communities are more similar when comparing sampling population to the presence/absence of garlic mustard. **A)** Presence/absence of garlic mustard among quadrates. **B)** Specific sampling locations of quadrates. Sampling population results in greater clustering among 'in' or 'out' quadrates compared to presence/absence of garlic mustard.
+
+### Run NMDS
+```{r}
+set.seed(39)
+NMDSdat <- metaMDS(Flwr_Species_dist, k=2, trymax = 100)
+```
+
+### Select relevant columns 
+```{r}
+Plot_NMDS <- data.frame(NMDS1 = NMDSdat$points[,1],
+                   NMDS2 = NMDSdat$points[,2],
+                   Quadrate = row.names(Flwr_Species))
+```
+
+### Add labels using merge function 
+```{r}
+Plot_NMDS <- merge(Plot_NMDS, Flwr_Local, by = "Quadrate", all.x=T, all.y=F)
+```
+
+### Plot
+```{r}
+# Plot by sampling population 
+SampPop2 <- ggplot(Plot_NMDS, aes(x=NMDS1, y = NMDS2, colour=Population)) +
+  geom_point() +
+  theme_pub() +
+  theme(legend.position="right")
+
+# plot by in/out
+InOut2 <- ggplot(Plot_NMDS, aes(x=NMDS1, y = NMDS2, colour=Location)) +
+  geom_point() + 
+  theme_pub() +
+  theme(legend.position="right")
+
+# plot both graphs together 
+plot_grid(InOut2,SampPop2, labels = "AUTO")
+```
+
+**Figure 3.** Quadrate plant communities are more similar among sampling populations compared to the presence/absence of garlic mustard. **A)** Absence/presence of garlic mustard among quadrates **B)** Specific sampling location of each quadrate. For sampling population, lower number populations cluster to the right, while higher number populations cluster to the right. 
+
+#### Interpretation
+Sampling population appears to have a greater impact on plant community as there is greater clustering than when compared to the absence/presence of garlic mustard; however the overall impact of sampling population appears to be minimal as the extent of clustering is minor. 
+
